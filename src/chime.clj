@@ -33,31 +33,33 @@
   There are extensive usage examples in the README"
   [times & [{:keys [ch] :or {ch (a/chan)}}]]
 
-  (let [cancel-ch (a/chan)
-        times-fn (^:once fn* [] times)]
-    (go-loop [now (t/now)
-              [next-time & more-times] (->> (times-fn)
-                                            (map tc/to-date-time)
-                                            (drop-while #(t/before? % now)))]
-      (a/alt!
-        cancel-ch (a/close! ch)
+  (let [time-now (t/now)
+        future-times (->> times
+                          (map tc/to-date-time)
+                          (drop-while #(t/before? % time-now)))]
+    (when (seq future-times)
+      (let [cancel-ch (a/chan)]
+        (go-loop [now time-now
+                  [next-time & more-times] future-times]
+          (a/alt!
+            cancel-ch (a/close! ch)
 
-        (a/timeout (ms-between now next-time)) (do
-                                                 (>! ch next-time)
+            (a/timeout (ms-between now next-time)) (do
+                                                     (>! ch next-time)
 
-                                                 (if (seq more-times)
-                                                   (recur (t/now) more-times)
-                                                   (a/close! ch)))
+                                                     (if (seq more-times)
+                                                       (recur (t/now) more-times)
+                                                       (a/close! ch)))
 
-        :priority true))
+            :priority true)))
 
-    (reify
-      p/ReadPort
-      (take! [_ handler]
-        (p/take! ch handler))
+      (reify
+        p/ReadPort
+        (take! [_ handler]
+          (p/take! ch handler))
 
-      p/Channel
-      (close! [_] (p/close! cancel-ch)))))
+        p/Channel
+        (close! [_] (p/close! cancel-ch))))))
 
 (defn chime-at [times f & [{:keys [error-handler on-finished]
                             :or {on-finished #()}}]]
