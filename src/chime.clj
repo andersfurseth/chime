@@ -1,8 +1,7 @@
 (ns chime
-  (:require [clj-time.core :as t]
-            [clj-time.coerce :as tc]
-            [clojure.core.async :as a :refer [<! >! go-loop]]
-            [clojure.core.async.impl.protocols :as p]))
+  (:require [clj-time.coerce :as tc]
+            [clj-time.core :as t]
+            [clojure.core.async :refer [<! >! close! go-loop take!]]))
 
 (defn- ms-between [start end]
   (if (t/before? end start)
@@ -36,9 +35,7 @@
   (let [cancel-ch (a/chan)
         times-fn (^:once fn* [] times)]
     (go-loop [now (t/now)
-              [next-time & more-times] (->> (times-fn)
-                                            (map tc/to-date-time)
-                                            (drop-while #(t/before? % now)))]
+              [next-time & more-times] (map tc/to-date-time (times-fn))]
       (a/alt!
         cancel-ch (a/close! ch)
 
